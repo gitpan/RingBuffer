@@ -3,7 +3,7 @@ package RingBuffer;
 # Written by Travis Kent Beste
 # Tue Oct 28 10:38:33 CDT 2008
 #
-# $Id: RingBuffer.pm 1 2008-10-29 18:07:52Z travis $
+# $Id: RingBuffer.pm 5 2008-11-04 00:55:08Z travis $
 
 use 5.008008;
 use strict;
@@ -33,7 +33,7 @@ our @EXPORT = qw(
 	
 );
 
-our $VERSION = ( qw$Revision: 1 $ )[1];
+our $VERSION = ( qw$Revision: 5 $ )[1];
 
 =head1 NAME
 
@@ -180,7 +180,23 @@ sub ring_init {
 	$self->size($args{'RingSize'});
 
 	# Set the buffer type
-	$self->buffer($args{'Buffer'});
+	if ($args{'Buffer'} =~ /array/i) {
+		for(my $i = 0; $i < $self->size(); $i++) {
+			$self->{buffer}[$i] = 0;
+		}
+	} else {
+		# the object type
+		$args{'Buffer'} =~ /(.*)=/;
+		my $type = $1;
+
+		# first import (like 'use <module_name>') but doesn't need to be bareword
+		import $type;
+
+		# now call new for the array of objects
+		for(my $i = 0; $i < $self->size(); $i++) {
+			$self->{buffer}[$i] = $type->new();
+		}
+	}
 
 	# Clear the ring buffer.
 	$self->ring_clear();
@@ -199,8 +215,12 @@ sub ring_init {
 sub ring_clear {
 	my $self = shift;
 
-	for(my $i = 0; $i <= $self->size; $i++) {
-		${$self->buffer}[$i] = 0;
+	for(my $i = 0; $i < $self->size; $i++) {
+		if (${$self->buffer}[$i] == 0) {
+			${$self->buffer}[$i] = 0;
+		} else {
+			${$self->buffer}[$i]->clear();
+		}
 	}
 
 	$self->head(0);
