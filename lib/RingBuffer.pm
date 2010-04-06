@@ -216,11 +216,7 @@ sub ring_clear {
 	my $self = shift;
 
 	for(my $i = 0; $i < $self->size; $i++) {
-		if (${$self->buffer}[$i] == 0) {
-			${$self->buffer}[$i] = 0;
-		} else {
-			${$self->buffer}[$i]->clear();
-		}
+		${$self->buffer}[$i] = 0;
 	}
 
 	$self->head(0);

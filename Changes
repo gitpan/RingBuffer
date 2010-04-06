@@ -9,3 +9,6 @@ Revision history for Perl extension RingBuffer.
 
 2  Mon Nov  3 18:42:17 CST 2008
 	- fixed how you create a ring of objects, works now
+
+3  Tue Apr  6 13:42:43 CDT 2010
+	- creating ring of objects not working - reverted for now
