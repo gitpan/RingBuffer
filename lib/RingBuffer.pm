@@ -2,8 +2,6 @@ package RingBuffer;
 #
 # Written by Travis Kent Beste
 # Tue Oct 28 10:38:33 CDT 2008
-#
-# $Id: RingBuffer.pm 5 2008-11-04 00:55:08Z travis $
 
 use 5.008008;
 use strict;
@@ -42,15 +40,19 @@ RingBuffer - Perl extension for creating a ring buffer of any size with any obje
 =head1 SYNOPSIS
 
   use RingBuffer;
-  my $r = new RingBuffer();
+  my $buffer            = [];
+  my $ringsize          = 256;
+  my $overwrite         = 0;
+  my $printextendedinfo = 0;
+  my $r = new RingBuffer(
+    Buffer            => $buffer,
+    RingSize          => $ringsize,
+    Overwrite         => $overwrite,
+		PrintExtendedInfo => $printextendedinfo,
+	);
 
   # initialize the ring, in this case with an array
-  my $buffer = [];
-  my $ringsize = 256;
-  $r->ring_init(
-    Buffer => $buffer,
-    RingSize => $ringsize
-  ); # will create 256 ring buffer of array objects
+  $r->ring_init(); # will create 256 ring buffer of array objects
 
   # remove an object from the ring
   my $obj = $r->ring_remove();
@@ -76,16 +78,18 @@ object inside the buffer that you create.  Description of the functions are list
 
 =cut
 
-
 sub new {
 	my $class = shift;
 	my %args  = @_; 
 
 	my %fields = (
-		buffer         => undef,
-		size           => 0,
-		head           => 0,
-		tail           => 0,
+		buffer            => $args{'Buffer'},
+		ringsize          => $args{'RingSize'},
+		size              => 0,
+		head              => 0,
+		tail              => 0,
+		overwrite         => $args{'Overwrite'},
+		printextendedinfo => $args{'PrintExtendedInfo'},
 	);
 
 	my $self = {
@@ -129,13 +133,14 @@ sub DESTROY {
 # Calculate the next value for the ring head index.
 #--------------------#
 sub _ring_next_head {
-	my $self = shift;
+	my $self      = shift;
   my $next_head = 0;
 
 	# Get next value for head, and wrap if necessary.
 	$next_head = $self->head + 1;
 
-	if ($next_head >= $self->size) {
+
+	if ($next_head >= $self->ringsize) {
 		$next_head = 0;
 	}
 
@@ -174,19 +179,15 @@ the 'Buffer=><obj>' argument.
 #--------------------#
 sub ring_init {
 	my $self = shift;
-	my %args = @_;
-
-	# Set the buffer size.
-	$self->size($args{'RingSize'});
 
 	# Set the buffer type
-	if ($args{'Buffer'} =~ /array/i) {
-		for(my $i = 0; $i < $self->size(); $i++) {
-			$self->{buffer}[$i] = 0;
+	if ($self->{'buffer'} =~ /array/i) {
+		for(my $i = 0; $i < $self->ringsize; $i++) {
+			$self->{'buffer'}[$i] = 0;
 		}
 	} else {
 		# the object type
-		$args{'Buffer'} =~ /(.*)=/;
+		$self->{'buffer'} =~ /(.*)=/;
 		my $type = $1;
 
 		# first import (like 'use <module_name>') but doesn't need to be bareword
@@ -215,12 +216,13 @@ sub ring_init {
 sub ring_clear {
 	my $self = shift;
 
-	for(my $i = 0; $i < $self->size; $i++) {
+	for(my $i = 0; $i < $self->ringsize; $i++) {
 		${$self->buffer}[$i] = 0;
 	}
 
-	$self->head(0);
-	$self->tail(0);
+	$self->{head} = 0;
+	$self->{tail} = 0;
+	$self->{size} = 0;
 }
 
 =item $r->ring_add();
@@ -240,17 +242,30 @@ sub ring_add {
 	# Check for room in the ring buffer.
 	$next_head = $self->_ring_next_head();
 
-	# this is the case where we've wrapped around and
-	# the tail needs to stay ahead of the head as we
-	# drop bytes from the buffer
-	if ( ($self->ring_size == ($self->size - 1) ) ) {
-		$next_tail = $self->_ring_next_tail();
-		$self->tail($next_tail);
-	}
+	if ($self->size == $self->ringsize) {
+		#print "possible overflow!\n";
 
-	# Add data to buffer and increase the head index.
-	${$self->buffer}[$self->head] = $data;
-	$self->head($next_head);
+		if ($self->overwrite) {
+			#print "overwrite enabled\n";
+
+			# Add data to buffer and increase the head index.
+			${$self->buffer}[$self->head] = $data;
+			$self->head($next_head);
+			# no size increase
+
+		} else {
+			#print "overwrite disabled\n";
+
+		}
+	} else {
+
+		# Add data to buffer and increase the head index.
+		${$self->buffer}[$self->head] = $data;
+		$self->head($next_head);
+		# size increase
+		$self->{size}++;
+
+	}
 
 	return 1;
 }
@@ -268,7 +283,7 @@ sub ring_remove {
 	my $data = 0;
 
 	# Check for any data in the ring buffer.
-	if($self->head != $self->tail) {
+	if ($self->size) {
 		# Remove data byte.
 		$data = ${$self->buffer}[$self->tail];
 
@@ -277,9 +292,12 @@ sub ring_remove {
 
 		# Get next value for ring tail index, wrap if necessary.
 		$self->tail($self->tail + 1);
-		if($self->tail >= $self->size) {
+		if($self->tail >= $self->ringsize) {
 			$self->tail(0);
 		}
+
+		# descrease the size
+		$self->{size}--;
 	}
 
 	return($data);
@@ -294,18 +312,11 @@ around of the ring.
 #--------------------#
 # get the ring size
 #--------------------#
-
 sub ring_size {
 	my $self = shift;
 
-	if ( ($self->head) < ($self->tail) ) {
-		# wrap around
-		return ( ($self->head) + ($self->size) - ($self->tail) );
-	} else {
-		return ( ($self->head) - ($self->tail) );
-	}
+	return $self->size;
 }
-
 
 =item $r->ring_add_to_front();
 
@@ -313,7 +324,7 @@ sub ring_size {
 
 =cut
 #--------------------#
-# add a byte to the front of the ring
+# add a byte to the front or tail of the ring
 #--------------------#
 sub ring_add_to_front {
 	my $self      = shift;
@@ -325,13 +336,15 @@ sub ring_add_to_front {
 	if ($next_tail > 0) {
 		$next_tail--;
 	} else {
-		$next_tail = $self->size - 1;
+		$next_tail = $self->ringsize - 1;
 	}
 
 	if($next_tail != $self->head) {
 		# Add data to buffer and increase the head index.
 		${$self->buffer}[$next_tail] = $data;
 		$self->tail($next_tail);
+
+		$self->{size}++;
 	}
 
 	return 1;
@@ -378,8 +391,8 @@ sub ring_peek {
   my $data = 0;
 
 	# Check for any data in the ring buffer.
-	if($self->head != $self->tail) {
-		# Remove data byte.
+	if ($self->size) {
+		# get data byte.
 		$data = ${$self->buffer}[$self->tail];
 	}
 
@@ -389,7 +402,8 @@ sub ring_peek {
 =item $r->ring_print();
 
 	Print the contents of the ring.  Could be a huge printout
-if you make the ring size large.
+if you make the ring size large.  Also you can set the variable 
+'PrintExtendedInfo' and get the head and tail on a seperate line.
 
 =cut
 #--------------------#
@@ -398,14 +412,30 @@ if you make the ring size large.
 sub ring_print {
 	my $self = shift;
 
-	printf "size:%02d ", $self->ring_size();
+	printf "size:%02d ", $self->size;
 	printf "head:%02d ", $self->head;
 	printf "tail:%02d ", $self->tail;
 	print "| ";
-	for(my $r_cntr = 0; $r_cntr < $self->size; $r_cntr++) {
+	for(my $r_cntr = 0; $r_cntr < $self->ringsize; $r_cntr++) {
 		printf "%02x ", ${$self->buffer}[$r_cntr];
 	}
 	print "\n";
+
+	if ($self->printextendedinfo) {
+		print "                        | ";
+		for(my $r_cntr = 0; $r_cntr < $self->ringsize; $r_cntr++) {
+			if ( ($self->head == $r_cntr) && ($self->tail == $r_cntr) ) {
+				printf "%2s ", 'th';
+			} elsif ($self->head == $r_cntr) {
+				printf "%2s ", 'h';
+			} elsif ($self->tail == $r_cntr) {
+				printf "%2s ", 't';
+			} else {
+				printf "%2d ", $r_cntr;
+			}
+		}
+		print "\n";
+	}
 
 	return 1;
 }

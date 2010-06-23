@@ -1,4 +1,4 @@
-RingBuffer version 0.01
+RingBuffer version 0.04
 =======================
 
 This PERL module provides the abstract ability to implement a Ring Buffer.

@@ -1,8 +1,6 @@
 #
 # Written by Travis Kent Beste
 # Tue Oct 28 12:52:49 CDT 2008
-#
-# $Id: RingBuffer.t 5 2008-11-04 00:55:08Z travis $
 
 use Test::More tests => 14;
 
@@ -10,9 +8,10 @@ use Test::More tests => 14;
 BEGIN { use_ok('RingBuffer'); }
 
 # Test 2:
-my $obj = new RingBuffer;
 my $buffer = [];
-my $result = $obj->ring_init( Buffer=>$buffer, RingSize=>16 );
+my $ringsize = 16;
+my $obj = new RingBuffer( Buffer=>$buffer, RingSize=>$ringsize );
+my $result = $obj->ring_init();
 ok($result == 1, 'init');
 
 # Test 3:
